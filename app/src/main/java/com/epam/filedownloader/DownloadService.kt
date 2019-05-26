@@ -15,6 +15,7 @@ import android.net.NetworkRequest
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import java.net.URL
 
@@ -37,6 +38,7 @@ class DownloadService : Service() {
     private val connectivityCallBack = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network?) {
             super.onAvailable(network)
+            Log.d(TAG, "IN CONNECTION CALLBACK")
             if (isDownloading) {
                 startDownload(imageUrl)
             }
@@ -47,6 +49,11 @@ class DownloadService : Service() {
         super.onCreate()
         connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         connectivityManager.registerNetworkCallback(networkRequest, connectivityCallBack)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        connectivityManager.unregisterNetworkCallback(connectivityCallBack)
     }
 
     override fun onBind(intent: Intent?): IBinder? = ServiceBinder()
@@ -63,17 +70,29 @@ class DownloadService : Service() {
                 startDownload(it)
             }
         }
+        if (!isConnected()) {
+            sendIntentToBroadcast(false)
+        }
         return START_STICKY
     }
 
     private fun startDownload(uri: String) {
-        if (!isConnected()) return
-        _isDownloading = true
         Thread {
+            _isDownloading = true
             _bitmap = BitmapFactory.decodeStream(URL(uri).openConnection().getInputStream())
-            stopSelf()
-            _isDownloading = false
+            if (bitmap != null) {
+                sendIntentToBroadcast(true)
+                _isDownloading = false
+                stopForeground(true)
+            }
+            sendIntentToBroadcast(false)
         }.start()
+    }
+
+    private fun sendIntentToBroadcast(succeed: Boolean) {
+        Intent(DOWNLOADED).putExtra(SUCCESS_DOWNLOAD, succeed).also {
+            sendBroadcast(it)
+        }
     }
 
     private fun createNotificationChannel(
@@ -104,10 +123,7 @@ class DownloadService : Service() {
             .build()
     }
 
-    private fun isConnected(): Boolean {
-        val network = connectivityManager.activeNetworkInfo ?: return false
-        return network.isConnected
-    }
+    private fun isConnected(): Boolean = connectivityManager.activeNetworkInfo?.isConnected == true
 
     inner class ServiceBinder : Binder() {
         val serviceInstance = this@DownloadService
@@ -119,5 +135,6 @@ class DownloadService : Service() {
         private const val NOTIFICATION_ID = 1
         private const val FILE_URI = "FILE_URI"
         const val DOWNLOADED = "DOWNLOADED"
+        const val SUCCESS_DOWNLOAD = "SUCCESS_DOWNLOAD"
     }
 }

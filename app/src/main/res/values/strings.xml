@@ -1,8 +1,9 @@
 <resources>
     <string name="app_name">FileDownloader</string>
-    <string name="url_example">https://www.google.com/</string>
     <string name="download">Download</string>
     <string name="download_service">DownloadService</string>
     <string name="starting_downloading">Starting downloading...</string>
     <string name="fail_to_download">Fail to download.</string>
+    <string name="default_url">https://i.imgur.com/iWFGIJW.jpg</string>
+    <string name="invalid_uri">Invalid url.</string>
 </resources>
