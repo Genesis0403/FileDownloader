@@ -8,15 +8,14 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.net.ConnectivityManager
-import android.net.Network
-import android.net.NetworkCapabilities
-import android.net.NetworkRequest
+import android.net.*
 import android.os.Binder
 import android.os.Build
+import android.os.Environment
 import android.os.IBinder
-import android.util.Log
 import androidx.core.app.NotificationCompat
+import java.io.File
+import java.io.FileOutputStream
 import java.net.URL
 
 class DownloadService : Service() {
@@ -24,9 +23,6 @@ class DownloadService : Service() {
     private lateinit var connectivityManager: ConnectivityManager
 
     private var imageUrl = ""
-
-    private var _bitmap: Bitmap? = null
-    val bitmap: Bitmap? get() = _bitmap
 
     private var _isDownloading = false
     val isDownloading: Boolean get() = _isDownloading
@@ -38,7 +34,6 @@ class DownloadService : Service() {
     private val connectivityCallBack = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network?) {
             super.onAvailable(network)
-            Log.d(TAG, "IN CONNECTION CALLBACK")
             if (isDownloading) {
                 startDownload(imageUrl)
             }
@@ -71,7 +66,7 @@ class DownloadService : Service() {
             }
         }
         if (!isConnected()) {
-            sendIntentToBroadcast(false)
+            sendIntentToBroadcast(false, Uri.EMPTY)
         }
         return START_STICKY
     }
@@ -79,18 +74,41 @@ class DownloadService : Service() {
     private fun startDownload(uri: String) {
         Thread {
             _isDownloading = true
-            _bitmap = BitmapFactory.decodeStream(URL(uri).openConnection().getInputStream())
+            val bitmap = BitmapFactory.decodeStream(URL(uri).openConnection().getInputStream())
             if (bitmap != null) {
-                sendIntentToBroadcast(true)
+                val downloadedUri = writeToExternalStorage(bitmap)
+                sendIntentToBroadcast(true, downloadedUri)
                 _isDownloading = false
                 stopForeground(true)
+            } else {
+                sendIntentToBroadcast(false, Uri.EMPTY)
             }
-            sendIntentToBroadcast(false)
         }.start()
     }
 
-    private fun sendIntentToBroadcast(succeed: Boolean) {
-        Intent(DOWNLOADED).putExtra(SUCCESS_DOWNLOAD, succeed).also {
+    private fun writeToExternalStorage(bitmap: Bitmap?): Uri {
+        if (Environment.getExternalStorageState() == Environment.MEDIA_MOUNTED) {
+            val imageDir = getExternalFilesDir(Environment.DIRECTORY_PICTURES)
+
+            val file = File(imageDir, "$bitmap.jpg")
+            if (file.exists()) {
+                file.delete()
+            }
+
+            FileOutputStream(file).use {
+                bitmap?.compress(Bitmap.CompressFormat.PNG, 90, it)
+                it.flush()
+            }
+            return Uri.fromFile(file)
+        }
+        return Uri.EMPTY
+    }
+
+    private fun sendIntentToBroadcast(succeed: Boolean, uri: Uri) {
+        Intent(DOWNLOADED).apply {
+            putExtra(SUCCESS_DOWNLOAD, succeed)
+            putExtra(FILE_URI, uri.toString())
+        }.also {
             sendBroadcast(it)
         }
     }
@@ -119,6 +137,7 @@ class DownloadService : Service() {
             .setSmallIcon(R.drawable.ic_file_download_black_24dp)
             .setContentTitle("Downloading...")
             .setContentText("Downloading in progress...")
+            .setProgress(0, 0, true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
     }
@@ -133,7 +152,7 @@ class DownloadService : Service() {
         private const val TAG = "DownloadService"
         private const val NOTIFICATION_CHANNEL = "NOTIFICATION_CHANNEL"
         private const val NOTIFICATION_ID = 1
-        private const val FILE_URI = "FILE_URI"
+        const val FILE_URI = "FILE_URI"
         const val DOWNLOADED = "DOWNLOADED"
         const val SUCCESS_DOWNLOAD = "SUCCESS_DOWNLOAD"
     }

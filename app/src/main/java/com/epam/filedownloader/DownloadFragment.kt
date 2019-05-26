@@ -1,8 +1,15 @@
 package com.epam.filedownloader
 
+import android.Manifest
+import android.app.Activity
 import android.content.*
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
+import android.provider.MediaStore
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -11,6 +18,8 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.Toast
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 
 class DownloadFragment : Fragment() {
@@ -19,8 +28,11 @@ class DownloadFragment : Fragment() {
     private val downloadedReceiver = LocalBroadcastReceiver()
 
     private var isBound = false
+    private var isPermissionGranted = false
 
     private lateinit var imageView: ImageView
+
+    private var imageUri = Uri.EMPTY
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceDisconnected(name: ComponentName?) {
@@ -31,6 +43,11 @@ class DownloadFragment : Fragment() {
             isBound = true
             downloadService = (service as DownloadService.ServiceBinder).serviceInstance
         }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        checkStoragePermission()
     }
 
     override fun onResume() {
@@ -60,7 +77,8 @@ class DownloadFragment : Fragment() {
     }
 
     private fun initDownloadButton(uri: String) {
-        if (isBound && !downloadService.isDownloading) {
+        Log.d(TAG, isPermissionGranted.toString())
+        if (isPermissionGranted && isBound && !downloadService.isDownloading) {
             if (URLUtil.isValidUrl(uri)) {
                 Intent(context, DownloadService::class.java).apply {
                     putExtra(FILE_URI, uri)
@@ -73,7 +91,6 @@ class DownloadFragment : Fragment() {
                 Toast.makeText(context, getString(R.string.invalid_uri), Toast.LENGTH_SHORT).show()
             }
         }
-
     }
 
     override fun onStart() {
@@ -91,12 +108,27 @@ class DownloadFragment : Fragment() {
         isBound = false
     }
 
+    override fun onViewStateRestored(savedInstanceState: Bundle?) {
+        super.onViewStateRestored(savedInstanceState)
+        val uriString = savedInstanceState?.getString(FILE_URI) ?: return
+        if (uriString != Uri.EMPTY.toString()) {
+            imageUri = Uri.parse(uriString)
+            imageView.setImageBitmap(MediaStore.Images.Media.getBitmap(context?.contentResolver, imageUri))
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString(FILE_URI, imageUri.toString())
+    }
+
     inner class LocalBroadcastReceiver : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == DownloadService.DOWNLOADED) {
                 val success = intent.getBooleanExtra(DownloadService.SUCCESS_DOWNLOAD, false)
                 if (success) {
-                    imageView.setImageBitmap(downloadService.bitmap)
+                    imageUri = Uri.parse(intent.getStringExtra(DownloadService.FILE_URI))
+                    imageView.setImageBitmap(MediaStore.Images.Media.getBitmap(context?.contentResolver, imageUri))
                 } else {
                     Toast.makeText(context, "An error occurred during downloading", Toast.LENGTH_LONG).show()
                 }
@@ -104,10 +136,43 @@ class DownloadFragment : Fragment() {
         }
     }
 
+    private fun checkStoragePermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+        if (ContextCompat.checkSelfPermission(context as Activity, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            ActivityCompat.requestPermissions(
+                context as Activity,
+                arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
+                WRITE_EXTERNAL_STORAGE
+            )
+        }
+        isPermissionGranted = true
+
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        when (requestCode) {
+            WRITE_EXTERNAL_STORAGE -> {
+                if (grantResults.isEmpty() || grantResults[0] != PackageManager.PERMISSION_GRANTED) {
+                    Toast.makeText(context, "App requires location permission", Toast.LENGTH_SHORT).show()
+                    return
+                }
+                isPermissionGranted = true
+            }
+        }
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+    }
+
     companion object {
         private const val TAG = "DOWNLOAD FRAGMENT"
         private const val FILE_URI = "FILE_URI"
         const val DOWNLOAD_ACTION = "com.epam.filedownloader.DOWNLOAD_ACTION"
+        private const val WRITE_EXTERNAL_STORAGE = 1
 
         fun newInstance() = DownloadFragment()
     }
