@@ -18,6 +18,12 @@ import java.io.File
 import java.io.FileOutputStream
 import java.net.URL
 
+
+/**
+ * Service which downloads an image by its URL.
+ *
+ * @author Vlad Korotkevich
+ */
 class DownloadService : Service() {
 
     private lateinit var connectivityManager: ConnectivityManager

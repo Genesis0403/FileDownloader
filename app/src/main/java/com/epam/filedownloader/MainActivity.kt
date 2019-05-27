@@ -3,6 +3,11 @@ package com.epam.filedownloader
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 
+/**
+ * Main Activity which contains [DownloadFragment].
+ *
+ * @author Vlad Korotkevich
+ */
 class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {

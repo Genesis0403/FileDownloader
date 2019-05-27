@@ -22,6 +22,14 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 
+/**
+ * Fragment which starts [DownloadService] and [LocalBroadcastReceiver]
+ * to download an image from the Internet by its URL.
+ * Also asks permission for writing into external storage.
+ *
+ * @author Vlad Korotkevich
+ */
+
 class DownloadFragment : Fragment() {
 
     private lateinit var downloadService: DownloadService
@@ -122,6 +130,11 @@ class DownloadFragment : Fragment() {
         outState.putString(FILE_URI, imageUri.toString())
     }
 
+    /**
+     * Receiver which get intent when image is downloaded.
+     *
+     * @author Vlad Korotkevich
+     */
     inner class LocalBroadcastReceiver : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == DownloadService.DOWNLOADED) {
